@@ -1,0 +1,169 @@
+Path optimization problem:
+import java.util.*;
+
+public class RobotPathGA {
+
+    static final int GRID_SIZE = 10;
+    static final int CHROMOSOME_LENGTH = 30;
+    static final int POP_SIZE = 100;
+    static final double CROSSOVER_RATE = 0.7;
+    static final double MUTATION_RATE = 0.01;
+    static final int GENERATIONS = 10;
+
+    static final int[][] directions = { {-1,0}, {1,0}, {0,-1}, {0,1} }; // Up, Down, Left, Right
+    static final Set<String> obstacles = new HashSet<>();
+
+    static Random rand = new Random();
+
+    public static void main(String[] args) {
+        // Define obstacles
+        addObstacle(3, 3);
+        addObstacle(3, 4);
+        addObstacle(3, 5);
+        addObstacle(5, 6);
+        addObstacle(6, 6);
+        addObstacle(7, 6);
+
+        List<List<Integer>> population = initializePopulation();
+
+        List<Integer> bestPath = null;
+        double bestFitness = Double.NEGATIVE_INFINITY;
+
+        for (int gen = 0; gen < GENERATIONS; gen++) {
+            Map<List<Integer>, Double> fitnessMap = new HashMap<>();
+            for (List<Integer> individual : population) {
+                double fitness = evaluate(individual);
+                fitnessMap.put(individual, fitness);
+                if (fitness > bestFitness) {
+                    bestFitness = fitness;
+                    bestPath = new ArrayList<>(individual);
+                }
+            }
+
+            List<List<Integer>> newPopulation = new ArrayList<>();
+
+            while (newPopulation.size() < POP_SIZE) {
+                List<Integer> parent1 = select(fitnessMap);
+                List<Integer> parent2 = select(fitnessMap);
+
+                List<List<Integer>> children = crossover(parent1, parent2);
+                newPopulation.add(mutate(children.get(0)));
+                if (newPopulation.size() < POP_SIZE)
+                    newPopulation.add(mutate(children.get(1)));
+            }
+
+            population = newPopulation;
+            System.out.printf("Generation %d | Best Fitness: %.2f%n", gen, bestFitness);
+        }
+
+        System.out.println("Best path: " + bestPath);
+        System.out.println("Final Position: " + simulatePath(bestPath));
+    }
+
+    static void addObstacle(int x, int y) {
+        obstacles.add(x + "," + y);
+    }
+
+    static List<List<Integer>> initializePopulation() {
+        List<List<Integer>> pop = new ArrayList<>();
+        for (int i = 0; i < POP_SIZE; i++) {
+            List<Integer> path = new ArrayList<>();
+            for (int j = 0; j < CHROMOSOME_LENGTH; j++) {
+                path.add(rand.nextInt(4)); // 0-3 direction
+            }
+            pop.add(path);
+        }
+        return pop;
+    }
+
+    static double evaluate(List<Integer> path) {
+        int x = 0, y = 0;
+        int collisions = 0;
+
+        for (int move : path) {
+            int nx = x + directions[move][0];
+            int ny = y + directions[move][1];
+
+            if (nx < 0 || ny < 0 || nx >= GRID_SIZE || ny >= GRID_SIZE || obstacles.contains(nx + "," + ny)) {
+                collisions++;
+                continue; // stay in place
+            }
+
+            x = nx;
+            y = ny;
+        }
+
+        double distanceToGoal = Math.hypot(9 - x, 9 - y);
+        boolean reachedGoal = (x == 9 && y == 9);
+
+        double fitness = 100 - distanceToGoal - (collisions * 5);
+        if (reachedGoal) fitness += 100;
+        return fitness;
+    }
+
+    static List<Integer> select(Map<List<Integer>, Double> fitnessMap) {
+        double totalFitness = fitnessMap.values().stream().mapToDouble(Double::doubleValue).sum();
+        double point = rand.nextDouble() * totalFitness;
+        double cumulative = 0;
+
+        for (Map.Entry<List<Integer>, Double> entry : fitnessMap.entrySet()) {
+            cumulative += entry.getValue();
+            if (cumulative >= point)
+                return entry.getKey();
+        }
+        return fitnessMap.keySet().iterator().next(); // fallback
+    }
+
+    static List<List<Integer>> crossover(List<Integer> p1, List<Integer> p2) {
+        if (rand.nextDouble() > CROSSOVER_RATE)
+            return Arrays.asList(p1, p2);
+
+        int point = rand.nextInt(CHROMOSOME_LENGTH);
+        List<Integer> child1 = new ArrayList<>(p1.subList(0, point));
+        child1.addAll(p2.subList(point, CHROMOSOME_LENGTH));
+
+        List<Integer> child2 = new ArrayList<>(p2.subList(0, point));
+        child2.addAll(p1.subList(point, CHROMOSOME_LENGTH));
+
+        return Arrays.asList(child1, child2);
+    }
+
+    static List<Integer> mutate(List<Integer> chromosome) {
+        List<Integer> mutated = new ArrayList<>(chromosome);
+        for (int i = 0; i < mutated.size(); i++) {
+            if (rand.nextDouble() < MUTATION_RATE) {
+                mutated.set(i, rand.nextInt(4));
+            }
+        }
+        return mutated;
+    }
+
+    static String simulatePath(List<Integer> path) {
+        int x = 0, y = 0;
+        for (int move : path) {
+            int nx = x + directions[move][0];
+            int ny = y + directions[move][1];
+            if (nx < 0 || ny < 0 || nx >= GRID_SIZE || ny >= GRID_SIZE || obstacles.contains(nx + "," + ny))
+                continue;
+            x = nx;
+            y = ny;
+        }
+        return "(" + x + ", " + y + ")";
+    }
+}
+
+
+
+output:
+Generation 0 | Best Fitness: 90.00
+Generation 1 | Best Fitness: 90.00
+Generation 2 | Best Fitness: 90.00
+Generation 3 | Best Fitness: 94.90
+Generation 4 | Best Fitness: 95.53
+Generation 5 | Best Fitness: 95.53
+Generation 6 | Best Fitness: 95.53
+Generation 7 | Best Fitness: 95.53
+Generation 8 | Best Fitness: 95.53
+Generation 9 | Best Fitness: 95.53
+Best path: [3, 2, 3, 1, 1, 1, 1, 0, 1, 0, 3, 1, 2, 1, 3, 2, 3, 2, 3, 3, 2, 0, 1, 1, 3, 0, 1, 3, 3, 1]
+Final Position: (7, 5)
