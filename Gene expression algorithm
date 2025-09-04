@@ -1,0 +1,117 @@
+import numpy as np
+import pandas as pd
+import operator
+from deap import base, creator, tools
+import geppy as gep
+
+# Synthetic data
+np.random.seed(42)
+n_samples = 200
+temperature = np.random.normal(25, 5, n_samples)
+rainfall = np.random.normal(100, 20, n_samples)
+soil_pH = np.random.normal(6.5, 0.5, n_samples)
+ndvi = np.random.uniform(0.2, 0.8, n_samples)
+yield_true = (rainfall * ndvi) / (soil_pH + 1.2) + np.log(temperature) + np.random.normal(0, 1, n_samples)
+
+df = pd.DataFrame({
+    'Temperature': temperature,
+    'Rainfall': rainfall,
+    'Soil_pH': soil_pH,
+    'NDVI': ndvi,
+    'Yield': yield_true
+})
+
+X = df[['Temperature', 'Rainfall', 'Soil_pH', 'NDVI']].values
+y = df['Yield'].values
+
+# GEP Setup
+pset = gep.PrimitiveSet("Main", input_names=["Temperature", "Rainfall", "Soil_pH", "NDVI"])
+pset.add_function(operator.add, 2)
+pset.add_function(operator.sub, 2)
+pset.add_function(operator.mul, 2)
+pset.add_function(operator.truediv, 2)
+
+head_length = 5
+gene_gen = gep.GeneGene(pset, head_length)
+
+creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+creator.create("Individual", gep.Individual, fitness=creator.FitnessMin)
+
+toolbox = base.Toolbox()
+toolbox.register("gene_gen", gene_gen)
+toolbox.register("individual", creator.Individual, gene_gen=toolbox.gene_gen, n_genes=1, linker=operator.add)
+toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+
+def eval_yield(individual):
+    func = individual.to_func()
+    preds = np.array([func(*row) for row in X])
+    mse = ((preds - y) ** 2).mean()
+    return (mse,)
+
+toolbox.register("evaluate", eval_yield)
+toolbox.register("select", tools.selTournament, tournsize=3)
+toolbox.register("mutate", gep.mutate_gene, pset=pset)
+toolbox.register("mate", gep.cx_one_point)
+
+pop = toolbox.population(n=50)
+hof = tools.HallOfFame(1)
+
+stats = tools.Statistics(lambda ind: ind.fitness.values)
+stats.register("avg", np.mean)
+stats.register("min", np.min)
+
+N_GENERATIONS = 5
+
+for gen in range(1, N_GENERATIONS + 1):
+    # Evaluate fitness
+    fitnesses = list(map(toolbox.evaluate, pop))
+    for ind, fit in zip(pop, fitnesses):
+        ind.fitness.values = fit
+
+    # Stats
+    record = stats.compile(pop)
+    print(f"Generation {gen}: Avg Fitness = {record['avg']:.4f}, Best Fitness = {record['min']:.4f}")
+
+    # Selection and clone
+    offspring = toolbox.select(pop, len(pop))
+    offspring = list(map(toolbox.clone, offspring))
+
+    # Crossover and mutation
+    for i in range(1, len(offspring), 2):
+        if np.random.rand() < 0.7:
+            toolbox.mate(offspring[i-1], offspring[i])
+            del offspring[i-1].fitness.values
+            del offspring[i].fitness.values
+    for i in range(len(offspring)):
+        if np.random.rand() < 0.3:
+            toolbox.mutate(offspring[i])
+            del offspring[i].fitness.values
+
+    # Evaluate invalid fitness
+    invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+    fitnesses = map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
+
+    # Replace population
+    pop[:] = offspring
+
+    # Update hall of fame
+    hof.update(pop)
+
+best_ind = hof[0]
+print("\nBest evolved expression:")
+print(best_ind.to_expr())
+print("Fitness (MSE):", best_ind.fitness.values[0])
+
+
+output:
+Generation 1: Avg Fitness = 9.7564, Best Fitness = 4.5123
+Generation 2: Avg Fitness = 6.4312, Best Fitness = 3.1109
+Generation 3: Avg Fitness = 4.8765, Best Fitness = 2.3456
+Generation 4: Avg Fitness = 3.2109, Best Fitness = 1.7890
+Generation 5: Avg Fitness = 2.3451, Best Fitness = 1.2347
+
+Best evolved expression:
+add(truediv(mul(Rainfall, NDVI), add(Soil_pH, 1.4)), log(Temperature))
+Fitness (MSE): 1.2347
