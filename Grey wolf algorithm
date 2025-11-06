@@ -1,0 +1,89 @@
+import numpy as np
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+
+np.random.seed(42)
+
+# Load dataset
+X, y = load_iris(return_X_y=True)
+n_features = X.shape[1]
+
+# Train/test split (outside fitness)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+def fitness_function(wolf):
+    selected_features = np.where(wolf > 0.5)[0]
+    if len(selected_features) == 0:
+        return 1  # worst fitness
+    model = KNeighborsClassifier(n_neighbors=3)
+    model.fit(X_train[:, selected_features], y_train)
+    acc = accuracy_score(y_test, model.predict(X_test[:, selected_features]))
+    return (1 - acc) + 0.1 * (len(selected_features) / n_features)
+
+def gwo(num_wolves=10, max_iter=20):
+    wolves = np.random.rand(num_wolves, n_features)
+    fitness = np.array([fitness_function(w) for w in wolves])
+    alpha, beta, delta = np.argsort(fitness)[:3]
+    X_alpha, X_beta, X_delta = wolves[alpha], wolves[beta], wolves[delta]
+
+    for t in range(max_iter):
+        a = 2 - 2 * t / max_iter
+        for i in range(num_wolves):
+            for j in range(n_features):
+                r1, r2 = np.random.rand(), np.random.rand()
+                A1, C1 = 2*a*r1 - a, 2*r2
+                D_alpha = abs(C1*X_alpha[j] - wolves[i, j])
+                X1 = X_alpha[j] - A1*D_alpha
+
+                r1, r2 = np.random.rand(), np.random.rand()
+                A2, C2 = 2*a*r1 - a, 2*r2
+                D_beta = abs(C2*X_beta[j] - wolves[i, j])
+                X2 = X_beta[j] - A2*D_beta
+
+                r1, r2 = np.random.rand(), np.random.rand()
+                A3, C3 = 2*a*r1 - a, 2*r2
+                D_delta = abs(C3*X_delta[j] - wolves[i, j])
+                X3 = X_delta[j] - A3*D_delta
+
+                wolves[i, j] = (X1 + X2 + X3) / 3
+
+            wolves[i] = np.clip(wolves[i], 0, 1)
+
+        fitness = np.array([fitness_function(w) for w in wolves])
+        alpha, beta, delta = np.argsort(fitness)[:3]
+        X_alpha, X_beta, X_delta = wolves[alpha], wolves[beta], wolves[delta]
+        print(f"Iteration {t+1}: Best fitness = {fitness[alpha]:.4f}")
+
+    return X_alpha, fitness[alpha]
+
+best_features, best_fitness = gwo()
+selected = np.where(best_features > 0.5)[0]
+print("\nSelected feature indices:", selected)
+print("Best fitness value:", best_fitness)
+
+output:
+Iteration 1: Best fitness = 0.1167
+Iteration 2: Best fitness = 0.1167
+Iteration 3: Best fitness = 0.1167
+Iteration 4: Best fitness = 0.1167
+Iteration 5: Best fitness = 0.1083
+Iteration 6: Best fitness = 0.1083
+Iteration 7: Best fitness = 0.1083
+Iteration 8: Best fitness = 0.1083
+Iteration 9: Best fitness = 0.1083
+Iteration 10: Best fitness = 0.1083
+Iteration 11: Best fitness = 0.1083
+Iteration 12: Best fitness = 0.1083
+Iteration 13: Best fitness = 0.1083
+Iteration 14: Best fitness = 0.1083
+Iteration 15: Best fitness = 0.1083
+Iteration 16: Best fitness = 0.1083
+Iteration 17: Best fitness = 0.1083
+Iteration 18: Best fitness = 0.1083
+Iteration 19: Best fitness = 0.1083
+Iteration 20: Best fitness = 0.1083
+
+Selected feature indices: [0 2 3]
+Best fitness value: 0.1083
